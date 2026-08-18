@@ -1,56 +1,114 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import "./App.css";
 import ReactMarkdown from "react-markdown";
+
 function App() {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const sendMessage = async () => {
+  const socketRef = useRef(null);
+  const messagesEndRef = useRef(null);
+
+  // Automatically scroll to the latest message
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({
+      behavior: "smooth",
+    });
+  }, [messages]);
+
+  // Create WebSocket connection when component loads
+  useEffect(() => {
+    const socket = new WebSocket("ws://localhost:8080/ws/chat");
+
+    socketRef.current = socket;
+
+    socket.onopen = () => {
+      console.log("WebSocket connected");
+    };
+
+    socket.onmessage = (event) => {
+      const chunk = event.data;
+
+      console.log("Received chunk:", chunk);
+
+      // Backend tells us that streaming is finished
+      if (chunk === "[DONE]") {
+        console.log("AI response completed");
+        setLoading(false);
+        return;
+      }
+
+      // Add the received chunk to the current AI message
+      setMessages((prev) => {
+        const updatedMessages = [...prev];
+
+        const lastMessage =
+          updatedMessages[updatedMessages.length - 1];
+
+        if (lastMessage?.role === "assistant") {
+          updatedMessages[updatedMessages.length - 1] = {
+            ...lastMessage,
+            content: lastMessage.content + chunk,
+          };
+        }
+
+        return updatedMessages;
+      });
+    };
+
+    socket.onerror = (error) => {
+      console.error("WebSocket error:", error);
+      setLoading(false);
+    };
+
+    socket.onclose = () => {
+      console.log("WebSocket disconnected");
+    };
+
+    // Close connection when component is removed
+    return () => {
+      if (
+        socket.readyState === WebSocket.OPEN ||
+        socket.readyState === WebSocket.CONNECTING
+      ) {
+        socket.close();
+      }
+    };
+  }, []);
+
+  const sendMessage = () => {
     if (!input.trim() || loading) return;
 
     const userMessage = input.trim();
 
+    // Make sure WebSocket is connected
+    if (
+      !socketRef.current ||
+      socketRef.current.readyState !== WebSocket.OPEN
+    ) {
+      console.error("WebSocket is not connected");
+      return;
+    }
+
+    // Add user message and empty AI message
     setMessages((prev) => [
       ...prev,
-      { role: "user", content: userMessage },
+      {
+        role: "user",
+        content: userMessage,
+      },
+      {
+        role: "assistant",
+        content: "",
+      },
     ]);
 
     setInput("");
     setLoading(true);
 
-    try {
-      const response = await fetch("http://localhost:8080/api/chat", {
-        method: "POST",
-        headers: {
-          "Content-Type": "text/plain",
-        },
-        body: userMessage,
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to get response from server");
-      }
-
-      const aiResponse = await response.text();
-
-      setMessages((prev) => [
-        ...prev,
-        { role: "assistant", content: aiResponse },
-      ]);
-    } catch (error) {
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: "assistant",
-          content: "Sorry, something went wrong. Please try again.",
-        },
-      ]);
-
-      console.error(error);
-    } finally {
-      setLoading(false);
-    }
+    // Send prompt to Spring Boot through WebSocket
+    socketRef.current.send(userMessage);
   };
 
   const handleKeyDown = (event) => {
@@ -67,13 +125,17 @@ function App() {
 
   return (
     <div className="app">
+      {/* Sidebar */}
       <aside className="sidebar">
         <div className="logo">
           <div className="logo-icon">✦</div>
           <span>Spring AI</span>
         </div>
 
-        <button className="new-chat-btn" onClick={startNewChat}>
+        <button
+          className="new-chat-btn"
+          onClick={startNewChat}
+        >
           <span>＋</span>
           New Chat
         </button>
@@ -84,7 +146,9 @@ function App() {
         </div>
       </aside>
 
+      {/* Main Chat */}
       <main className="chat-container">
+        {/* Header */}
         <header className="chat-header">
           <div>
             <h1>AI Assistant</h1>
@@ -92,6 +156,7 @@ function App() {
           </div>
         </header>
 
+        {/* Messages */}
         <section className="messages">
           {messages.length === 0 ? (
             <div className="welcome">
@@ -106,7 +171,9 @@ function App() {
               <div className="suggestions">
                 <button
                   onClick={() =>
-                    setInput("Explain dependency injection in Spring Boot")
+                    setInput(
+                      "Explain dependency injection in Spring Boot"
+                    )
                   }
                 >
                   Explain Dependency Injection
@@ -122,7 +189,9 @@ function App() {
 
                 <button
                   onClick={() =>
-                    setInput("Explain microservices in simple terms")
+                    setInput(
+                      "Explain microservices in simple terms"
+                    )
                   }
                 >
                   Explain Microservices
@@ -141,39 +210,40 @@ function App() {
 
                 <div className="message-content">
                   <div className="message-role">
-                    {message.role === "user" ? "You" : "AI Assistant"}
+                    {message.role === "user"
+                      ? "You"
+                      : "AI Assistant"}
                   </div>
 
-                 <div className="message-text">
-  <ReactMarkdown>{message.content}</ReactMarkdown>
-</div>
+                  <div className="message-text">
+                    <ReactMarkdown>
+                      {message.content}
+                    </ReactMarkdown>
+
+                    {/* Streaming cursor */}
+                    {message.role === "assistant" &&
+                      loading &&
+                      index === messages.length - 1 && (
+                        <span className="cursor">▌</span>
+                      )}
+                  </div>
                 </div>
               </div>
             ))
           )}
 
-          {loading && (
-            <div className="message-row assistant">
-              <div className="avatar">AI</div>
-
-              <div className="message-content">
-                <div className="message-role">AI Assistant</div>
-
-                <div className="typing">
-                  <span></span>
-                  <span></span>
-                  <span></span>
-                </div>
-              </div>
-            </div>
-          )}
+          {/* Auto-scroll target */}
+          <div ref={messagesEndRef} />
         </section>
 
+        {/* Input */}
         <div className="input-area">
           <div className="input-wrapper">
             <textarea
               value={input}
-              onChange={(event) => setInput(event.target.value)}
+              onChange={(event) =>
+                setInput(event.target.value)
+              }
               onKeyDown={handleKeyDown}
               placeholder="Message AI Assistant..."
               rows="1"
