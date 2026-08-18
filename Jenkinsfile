@@ -4,10 +4,14 @@ node {
   }
 
   stage('SonarQube Analysis') {
+    def jdk = tool 'JDK 21'
     def mvn = tool 'Default Maven'
-    withSonarQubeEnv('SonarQube') {
-      dir('SpringAiDemo') {
-        sh "${mvn}/bin/mvn clean verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar -Dsonar.projectKey=SpringAiChatBox"
+
+    withEnv(["JAVA_HOME=${jdk}", "PATH+JAVA=${jdk}/bin"]) {
+      withSonarQubeEnv('SonarQube') {
+        dir('SpringAiDemo') {
+          sh "${mvn}/bin/mvn clean verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar -Dsonar.projectKey=SpringAiChatBox"
+        }
       }
     }
   }
