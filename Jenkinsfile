@@ -7,7 +7,7 @@ node {
     def mvn = tool 'Default Maven'
     withSonarQubeEnv('SonarQube') {
       dir('SpringAiDemo') {
-        sh "${mvn}/bin/mvn clean verify sonar:sonar -Dsonar.projectKey=SpringAiChatBox"
+        sh "${mvn}/bin/mvn clean verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar -Dsonar.projectKey=SpringAiChatBox"
       }
     }
   }
