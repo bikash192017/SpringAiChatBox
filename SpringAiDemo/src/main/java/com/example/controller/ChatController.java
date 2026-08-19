@@ -3,11 +3,7 @@ package com.example.controller;
 
 
 import com.example.service.ChatService;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
-
+import org.springframework.web.bind.annotation.*;
 
 
 @RestController
@@ -19,7 +15,10 @@ public class ChatController {
     public ChatController(ChatService chatService) {
         this.chatService = chatService;
     }
-
+    @GetMapping()
+    public String testTheEndpoint(){
+        return "Jwt working Great..";
+    }
     @PostMapping
     public String chat(@RequestBody String prompt) {
         return chatService.getResponse(prompt);

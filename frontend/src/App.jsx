@@ -1,8 +1,15 @@
 import { useEffect, useRef, useState } from "react";
-import "./App.css";
 import ReactMarkdown from "react-markdown";
+import "./App.css";
+import Login from "./Login";
 
 function App() {
+  const [user, setUser] = useState(() => {
+    const savedUser = localStorage.getItem("user");
+
+    return savedUser ? JSON.parse(savedUser) : null;
+  });
+
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -10,16 +17,24 @@ function App() {
   const socketRef = useRef(null);
   const messagesEndRef = useRef(null);
 
-  // Automatically scroll to the latest message
+  // Automatically scroll to latest message
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({
       behavior: "smooth",
     });
   }, [messages]);
 
-  // Create WebSocket connection when component loads
+  // Connect WebSocket only after login
   useEffect(() => {
-    const socket = new WebSocket("ws://localhost:8080/ws/chat");
+    if (!user) {
+      return;
+    }
+
+    const token = localStorage.getItem("token");
+
+    const socket = new WebSocket(
+        `ws://localhost:8080/ws/chat?token=${encodeURIComponent(token)}`
+    );
 
     socketRef.current = socket;
 
@@ -32,14 +47,12 @@ function App() {
 
       console.log("Received chunk:", chunk);
 
-      // Backend tells us that streaming is finished
       if (chunk === "[DONE]") {
         console.log("AI response completed");
         setLoading(false);
         return;
       }
 
-      // Add the received chunk to the current AI message
       setMessages((prev) => {
         const updatedMessages = [...prev];
 
@@ -66,7 +79,6 @@ function App() {
       console.log("WebSocket disconnected");
     };
 
-    // Close connection when component is removed
     return () => {
       if (
         socket.readyState === WebSocket.OPEN ||
@@ -74,15 +86,18 @@ function App() {
       ) {
         socket.close();
       }
+
+      socketRef.current = null;
     };
-  }, []);
+  }, [user]);
 
   const sendMessage = () => {
-    if (!input.trim() || loading) return;
+    if (!input.trim() || loading) {
+      return;
+    }
 
     const userMessage = input.trim();
 
-    // Make sure WebSocket is connected
     if (
       !socketRef.current ||
       socketRef.current.readyState !== WebSocket.OPEN
@@ -91,7 +106,6 @@ function App() {
       return;
     }
 
-    // Add user message and empty AI message
     setMessages((prev) => [
       ...prev,
       {
@@ -107,7 +121,6 @@ function App() {
     setInput("");
     setLoading(true);
 
-    // Send prompt to Spring Boot through WebSocket
     socketRef.current.send(userMessage);
   };
 
@@ -123,10 +136,41 @@ function App() {
     setInput("");
   };
 
+  const handleLogout = () => {
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
+
+    if (socketRef.current) {
+      socketRef.current.close();
+    }
+
+    setUser(null);
+    setMessages([]);
+    setInput("");
+  };
+
+  // Show Login page when user is not authenticated
+  if (!user) {
+    return (
+      <Login
+        onLogin={(data) => {
+          setUser({
+            id: data.id,
+            name: data.name,
+            email: data.email,
+          });
+        }}
+      />
+    );
+  }
+
   return (
     <div className="app">
-      {/* Sidebar */}
+
+      {/* ================= SIDEBAR ================= */}
+
       <aside className="sidebar">
+
         <div className="logo">
           <div className="logo-icon">✦</div>
           <span>Spring AI</span>
@@ -140,35 +184,78 @@ function App() {
           New Chat
         </button>
 
-        <div className="sidebar-footer">
-          <span className="status-dot"></span>
-          <span>AI Assistant</span>
+        <div className="sidebar-bottom">
+
+          <div className="user-info">
+            <div className="user-avatar">
+              {user.name?.charAt(0).toUpperCase()}
+            </div>
+
+            <div>
+              <div className="user-name">
+                {user.name}
+              </div>
+
+              <div className="user-email">
+                {user.email}
+              </div>
+            </div>
+          </div>
+
+          <button
+            className="logout-btn"
+            onClick={handleLogout}
+          >
+            Logout
+          </button>
+
         </div>
+
       </aside>
 
-      {/* Main Chat */}
+      {/* ================= MAIN CHAT ================= */}
+
       <main className="chat-container">
-        {/* Header */}
+
+        {/* HEADER */}
+
         <header className="chat-header">
+
           <div>
             <h1>AI Assistant</h1>
             <p>Powered by Spring AI</p>
           </div>
+
+          <div className="connection-status">
+            <span className="status-dot"></span>
+            Connected
+          </div>
+
         </header>
 
-        {/* Messages */}
-        <section className="messages">
-          {messages.length === 0 ? (
-            <div className="welcome">
-              <div className="welcome-icon">✦</div>
+        {/* ================= MESSAGES ================= */}
 
-              <h2>How can I help you?</h2>
+        <section className="messages">
+
+          {messages.length === 0 ? (
+
+            <div className="welcome">
+
+              <div className="welcome-icon">
+                ✦
+              </div>
+
+              <h2>
+                How can I help you?
+              </h2>
 
               <p>
-                Ask me anything and I'll try my best to help you.
+                Ask me anything and I'll try my best
+                to help you.
               </p>
 
               <div className="suggestions">
+
                 <button
                   onClick={() =>
                     setInput(
@@ -196,19 +283,28 @@ function App() {
                 >
                   Explain Microservices
                 </button>
+
               </div>
+
             </div>
+
           ) : (
+
             messages.map((message, index) => (
+
               <div
                 key={index}
                 className={`message-row ${message.role}`}
               >
+
                 <div className="avatar">
-                  {message.role === "user" ? "You" : "AI"}
+                  {message.role === "user"
+                    ? "You"
+                    : "AI"}
                 </div>
 
                 <div className="message-content">
+
                   <div className="message-role">
                     {message.role === "user"
                       ? "You"
@@ -216,29 +312,39 @@ function App() {
                   </div>
 
                   <div className="message-text">
+
                     <ReactMarkdown>
                       {message.content}
                     </ReactMarkdown>
 
-                    {/* Streaming cursor */}
                     {message.role === "assistant" &&
                       loading &&
                       index === messages.length - 1 && (
-                        <span className="cursor">▌</span>
+                        <span className="cursor">
+                          ▌
+                        </span>
                       )}
+
                   </div>
+
                 </div>
+
               </div>
+
             ))
+
           )}
 
-          {/* Auto-scroll target */}
           <div ref={messagesEndRef} />
+
         </section>
 
-        {/* Input */}
+        {/* ================= INPUT ================= */}
+
         <div className="input-area">
+
           <div className="input-wrapper">
+
             <textarea
               value={input}
               onChange={(event) =>
@@ -253,17 +359,24 @@ function App() {
             <button
               className="send-btn"
               onClick={sendMessage}
-              disabled={!input.trim() || loading}
+              disabled={
+                !input.trim() || loading
+              }
             >
               ↑
             </button>
+
           </div>
 
           <p className="input-hint">
-            Press Enter to send · Shift + Enter for new line
+            Press Enter to send · Shift + Enter
+            for new line
           </p>
+
         </div>
+
       </main>
+
     </div>
   );
 }

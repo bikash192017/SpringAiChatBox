@@ -1,17 +1,21 @@
 package com.example.config;
 
 import com.example.service.ChatService;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
 
 @Component
-public class ChatWebSocketHandler extends TextWebSocketHandler {
+public class ChatWebSocketHandler
+        extends TextWebSocketHandler {
 
     private final ChatService chatService;
 
-    public ChatWebSocketHandler(ChatService chatService) {
+    public ChatWebSocketHandler(
+            ChatService chatService) {
+
         this.chatService = chatService;
     }
 
@@ -20,29 +24,62 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
             WebSocketSession session,
             TextMessage message) {
 
+        UserDetails user =
+                (UserDetails) session
+                        .getAttributes()
+                        .get("user");
+
+        if (user == null) {
+
+            System.out.println(
+                    "Unauthorized WebSocket message"
+            );
+
+            return;
+        }
+
+        String email = user.getUsername();
+
         String prompt = message.getPayload();
 
-        System.out.println("Received prompt: " + prompt);
+        System.out.println(
+                "User: " + email
+        );
+
+        System.out.println(
+                "Received prompt: " + prompt
+        );
 
         chatService.streamResponse(
+
                 prompt,
 
-                // Called whenever a new chunk arrives
                 chunk -> {
-                    try {
-                        if (session.isOpen()) {
-                            System.out.println("SENDING CHUNK TO UI: " + chunk);
 
-                            session.sendMessage(new TextMessage(chunk));
+                    try {
+
+                        if (session.isOpen()) {
+
+                            System.out.println(
+                                    "SENDING CHUNK TO UI: "
+                                            + chunk
+                            );
+
+                            session.sendMessage(
+                                    new TextMessage(chunk)
+                            );
                         }
+
                     } catch (Exception e) {
+
                         e.printStackTrace();
                     }
                 },
 
-                // Called when streaming is complete
                 () -> {
+
                     try {
+
                         if (session.isOpen()) {
 
                             System.out.println(
@@ -53,7 +90,9 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
                                     new TextMessage("[DONE]")
                             );
                         }
+
                     } catch (Exception e) {
+
                         e.printStackTrace();
                     }
                 }

@@ -9,3 +9,16 @@ spring:
         chat:
           options:
             model: gemini-3.5-flash
+
+  datasource:
+    url: jdbc:mysql://localhost:3306/spring_ai_chat
+    username: root
+    password: Csh22023@
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
