@@ -2,7 +2,7 @@ package com.example.config;
 
 import com.example.dto.ChatWebSocketRequest;
 import com.example.service.ChatService;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.TextMessage;

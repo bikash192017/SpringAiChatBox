@@ -4,6 +4,7 @@ import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
 
@@ -14,12 +15,18 @@ import java.util.Date;
 @Service
 public class JwtService {
 
-    private final String secretKey =
-            "my-super-secret-key-for-spring-ai-chat-application-2026";
+    private final String secretKey ;
 
-    private final long expirationTime =
-            1000 * 60 * 60; // 1 hour
+    private final long expirationTime ;
+             // 1 hour
 
+    public JwtService(
+            @Value("${jwt.secret}") String secretKey,
+            @Value("${jwt.expiration}") long expirationTime) {
+
+        this.secretKey = secretKey;
+        this.expirationTime = expirationTime;
+    }
     private SecretKey getSigningKey() {
 
         return Keys.hmacShaKeyFor(
