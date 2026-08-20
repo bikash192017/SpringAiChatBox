@@ -11,9 +11,9 @@ spring:
             model: gemini-3.5-flash
 
   datasource:
-    url: ${MYSQL_URL:jdbc:mysql://localhost:3306/spring_ai_chat}
-    username: ${MYSQL_USERNAME:root}
-    password: ${MYSQL_PASSWORD:Csh22023@}
+    url: ${MYSQL_URL}
+    username: ${MYSQL_USERNAME}
+    password: ${MYSQL_PASSWORD}
 
   jpa:
     hibernate:
