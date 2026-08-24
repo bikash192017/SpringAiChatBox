@@ -69,7 +69,7 @@ function App() {
       console.log("Loading chat history...");
 
       const response = await fetch(
-        "http://localhost:8080/api/chat/history",
+        `${import.meta.env.VITE_API_URL}/api/chat/history`,
         {
           method: "GET",
 
@@ -144,7 +144,7 @@ function App() {
       );
 
       const response = await fetch(
-        "http://localhost:8080/api/chat/conversation",
+        `${import.meta.env.VITE_API_URL}/api/chat/conversation`,
         {
           method: "POST",
 
@@ -305,7 +305,7 @@ function App() {
 
 
     const socket = new WebSocket(
-      `ws://localhost:8080/ws/chat?token=${encodeURIComponent(
+      `${import.meta.env.VITE_API_URL.replace(/^http/, "ws")}/ws/chat?token=${encodeURIComponent(
         token
       )}`
     );
