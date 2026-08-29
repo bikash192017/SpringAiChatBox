@@ -13,13 +13,10 @@ import org.springframework.web.socket.handler.TextWebSocketHandler;
 public class ChatWebSocketHandler extends TextWebSocketHandler {
 
     private final ChatService chatService;
-    private final ObjectMapper objectMapper;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
-    public ChatWebSocketHandler(
-            ChatService chatService,
-            ObjectMapper objectMapper) {
+    public ChatWebSocketHandler(ChatService chatService) {
         this.chatService = chatService;
-        this.objectMapper = objectMapper;
     }
 
     @Override
@@ -40,10 +37,6 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
             System.out.println("USER PROMPT: " + prompt);
             System.out.println("USER EMAIL: " + userEmail);
             System.out.println("=================================");
-
-            if (userEmail == null) {
-                System.err.println("❌ No authenticated email found in WebSocket session attributes!");
-            }
 
             chatService.streamResponse(
                     prompt,
