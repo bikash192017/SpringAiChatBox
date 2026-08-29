@@ -1,29 +1,22 @@
 package com.example.config;
 
-import com.example.security.CustomUserDetailsService;
 import com.example.security.JwtService;
 import org.springframework.http.server.ServerHttpRequest;
 import org.springframework.http.server.ServerHttpResponse;
-import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.http.server.ServletServerHttpRequest;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.WebSocketHandler;
 import org.springframework.web.socket.server.HandshakeInterceptor;
 
-import java.net.URLDecoder;
-import java.nio.charset.StandardCharsets;
 import java.util.Map;
 
 @Component
 public class WebSocketAuthInterceptor implements HandshakeInterceptor {
 
     private final JwtService jwtService;
-    private final CustomUserDetailsService userDetailsService;
 
-    public WebSocketAuthInterceptor(
-            JwtService jwtService,
-            CustomUserDetailsService userDetailsService) {
+    public WebSocketAuthInterceptor(JwtService jwtService) {
         this.jwtService = jwtService;
-        this.userDetailsService = userDetailsService;
     }
 
     @Override
@@ -33,58 +26,27 @@ public class WebSocketAuthInterceptor implements HandshakeInterceptor {
             WebSocketHandler wsHandler,
             Map<String, Object> attributes) {
 
-        try {
-            String query = request.getURI().getQuery();
+        if (request instanceof ServletServerHttpRequest servletRequest) {
+            String token = servletRequest.getServletRequest().getParameter("token");
 
-            if (query == null || query.isBlank()) {
-                System.out.println("WebSocket rejected: No query string found");
-                return false;
-            }
+            System.out.println("WebSocket Handshake - Token received: " + (token != null));
 
-            String token = null;
+            if (token != null && !token.isBlank()) {
+                try {
+                    String email = jwtService.extractEmail(token);
+                    System.out.println("WebSocket Handshake - Extracted Email: " + email);
 
-            for (String parameter : query.split("&")) {
-                String[] parts = parameter.split("=", 2);
-                if (parts.length == 2 && "token".equals(parts[0])) {
-                    token = URLDecoder.decode(parts[1], StandardCharsets.UTF_8);
-                    break;
+                    if (email != null && !email.isBlank()) {
+                        // Crucial: Must be "userEmail" in lowercase & trimmed
+                        attributes.put("userEmail", email.trim().toLowerCase());
+                        return true;
+                    }
+                } catch (Exception e) {
+                    System.err.println("❌ WebSocket JWT extraction failed: " + e.getMessage());
                 }
             }
-
-            if (token == null || token.isBlank()) {
-                System.out.println("WebSocket rejected: Token parameter missing");
-                return false;
-            }
-
-            if (token.startsWith("Bearer ")) {
-                token = token.substring(7);
-            }
-
-            String email = jwtService.extractEmail(token);
-
-            if (email == null || email.isBlank()) {
-                System.out.println("WebSocket rejected: Invalid token payload");
-                return false;
-            }
-
-            UserDetails userDetails = userDetailsService.loadUserByUsername(email);
-
-            if (!jwtService.isTokenValid(token, userDetails)) {
-                System.out.println("WebSocket rejected: Token expired or invalid for " + email);
-                return false;
-            }
-
-            // Store user details and email in the WebSocket session
-            attributes.put("user", userDetails);
-            attributes.put("email", email);
-
-            System.out.println("WebSocket handshake authenticated for: " + email);
-            return true;
-
-        } catch (Exception e) {
-            System.err.println("WebSocket authentication error: " + e.getMessage());
-            return false;
         }
+        return false;
     }
 
     @Override
