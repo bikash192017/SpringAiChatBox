@@ -9,6 +9,8 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.socket.WebSocketHandler;
 import org.springframework.web.socket.server.HandshakeInterceptor;
 
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 import java.util.Map;
 
 @Component
@@ -20,7 +22,6 @@ public class WebSocketAuthInterceptor implements HandshakeInterceptor {
     public WebSocketAuthInterceptor(
             JwtService jwtService,
             CustomUserDetailsService userDetailsService) {
-
         this.jwtService = jwtService;
         this.userDetailsService = userDetailsService;
     }
@@ -33,78 +34,55 @@ public class WebSocketAuthInterceptor implements HandshakeInterceptor {
             Map<String, Object> attributes) {
 
         try {
-
             String query = request.getURI().getQuery();
 
-            if (query == null) {
-                System.out.println("WebSocket rejected: No token");
+            if (query == null || query.isBlank()) {
+                System.out.println("WebSocket rejected: No query string found");
                 return false;
             }
 
             String token = null;
 
             for (String parameter : query.split("&")) {
-
                 String[] parts = parameter.split("=", 2);
-
-                if (parts.length == 2 &&
-                        parts[0].equals("token")) {
-
-                    token = parts[1];
+                if (parts.length == 2 && "token".equals(parts[0])) {
+                    token = URLDecoder.decode(parts[1], StandardCharsets.UTF_8);
                     break;
                 }
             }
 
             if (token == null || token.isBlank()) {
-
-                System.out.println(
-                        "WebSocket rejected: Token missing"
-                );
-
+                System.out.println("WebSocket rejected: Token parameter missing");
                 return false;
+            }
+
+            if (token.startsWith("Bearer ")) {
+                token = token.substring(7);
             }
 
             String email = jwtService.extractEmail(token);
 
-            if (email == null) {
-
-                System.out.println(
-                        "WebSocket rejected: Invalid token"
-                );
-
+            if (email == null || email.isBlank()) {
+                System.out.println("WebSocket rejected: Invalid token payload");
                 return false;
             }
 
-            UserDetails userDetails =
-                    userDetailsService.loadUserByUsername(email);
+            UserDetails userDetails = userDetailsService.loadUserByUsername(email);
 
-            if (!jwtService.isTokenValid(
-                    token,
-                    userDetails)) {
-
-                System.out.println(
-                        "WebSocket rejected: Token validation failed"
-                );
-
+            if (!jwtService.isTokenValid(token, userDetails)) {
+                System.out.println("WebSocket rejected: Token expired or invalid for " + email);
                 return false;
             }
 
-            // Store authenticated user in WebSocket session
+            // Store user details and email in the WebSocket session
             attributes.put("user", userDetails);
+            attributes.put("email", email);
 
-            System.out.println(
-                    "WebSocket authenticated: " + email
-            );
-
+            System.out.println("WebSocket handshake authenticated for: " + email);
             return true;
 
         } catch (Exception e) {
-
-            System.out.println(
-                    "WebSocket authentication error: "
-                            + e.getMessage()
-            );
-
+            System.err.println("WebSocket authentication error: " + e.getMessage());
             return false;
         }
     }
@@ -115,7 +93,5 @@ public class WebSocketAuthInterceptor implements HandshakeInterceptor {
             ServerHttpResponse response,
             WebSocketHandler wsHandler,
             Exception exception) {
-
-        // Nothing required here
     }
 }

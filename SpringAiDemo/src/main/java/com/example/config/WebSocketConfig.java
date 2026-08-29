@@ -1,9 +1,5 @@
 package com.example.config;
 
-import com.example.security.CustomUserDetailsService;
-import com.example.security.JwtHandshakeInterceptor;
-import com.example.security.JwtService;
-
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.socket.config.annotation.EnableWebSocket;
 import org.springframework.web.socket.config.annotation.WebSocketConfigurer;
@@ -14,38 +10,26 @@ import org.springframework.web.socket.config.annotation.WebSocketHandlerRegistry
 public class WebSocketConfig implements WebSocketConfigurer {
 
     private final ChatWebSocketHandler chatWebSocketHandler;
-    private final JwtService jwtService;
-    private final CustomUserDetailsService userDetailsService;
+    private final WebSocketAuthInterceptor webSocketAuthInterceptor;
 
     public WebSocketConfig(
             ChatWebSocketHandler chatWebSocketHandler,
-            JwtService jwtService,
-            CustomUserDetailsService userDetailsService) {
-
+            WebSocketAuthInterceptor webSocketAuthInterceptor) {
         this.chatWebSocketHandler = chatWebSocketHandler;
-        this.jwtService = jwtService;
-        this.userDetailsService = userDetailsService;
+        this.webSocketAuthInterceptor = webSocketAuthInterceptor;
     }
 
     @Override
-    public void registerWebSocketHandlers(
-            WebSocketHandlerRegistry registry) {
-
-        registry.addHandler(
-                        chatWebSocketHandler,
-                        "/ws/chat"
-                )
-                .addInterceptors(
-                        new JwtHandshakeInterceptor(
-                                jwtService,
-                                userDetailsService
-                        )
-                )
+    public void registerWebSocketHandlers(WebSocketHandlerRegistry registry) {
+        registry.addHandler(chatWebSocketHandler, "/ws/chat")
+                .addInterceptors(webSocketAuthInterceptor)
                 .setAllowedOriginPatterns(
                         "http://localhost:5173",
                         "http://localhost:5174",
                         "http://127.0.0.1:5173",
-                        "http://127.0.0.1:5174"
+                        "http://127.0.0.1:5174",
+                        "https://spring-ai-chat-box.vercel.app",
+                        "https://*.vercel.app" // allows Vercel preview branch deployments
                 );
     }
 }
