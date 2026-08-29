@@ -1,12 +1,14 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import ReactMarkdown from "react-markdown";
 import "./App.css";
 import Login from "./Login";
 
 function App() {
   // =====================================================
-  // USER
+  // USER & AUTH STATE
   // =====================================================
+
+  const [token, setToken] = useState(() => localStorage.getItem("token") || null);
 
   const [user, setUser] = useState(() => {
     const savedUser = localStorage.getItem("user");
@@ -29,29 +31,25 @@ function App() {
 
   const socketRef = useRef(null);
   const messagesEndRef = useRef(null);
-  const creatingConversationRef = useRef(false);
+  const isCreatingConversation = useRef(false);
 
   // =====================================================
   // AUTO SCROLL
   // =====================================================
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({
-      behavior: "smooth",
-    });
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
   // =====================================================
   // LOAD CHAT HISTORY
   // =====================================================
 
-  const loadChatHistory = async () => {
+  const loadChatHistory = useCallback(async () => {
+    if (!token) return;
+
     try {
-      const token = localStorage.getItem("token");
-      if (!token) return;
-
       console.log("Loading chat history...");
-
       const response = await fetch(
         `${import.meta.env.VITE_API_URL}/api/chat/history`,
         {
@@ -64,39 +62,29 @@ function App() {
 
       if (!response.ok) {
         console.error("Failed to load chat history:", response.status);
+        if (response.status === 401 || response.status === 403) {
+          handleLogout();
+        }
         return;
       }
 
       const conversations = await response.json();
-      console.log("CHAT HISTORY:", conversations);
-      setChatHistory(conversations);
+      setChatHistory(conversations || []);
     } catch (error) {
       console.error("Error loading chat history:", error);
     }
-  };
-
-  useEffect(() => {
-    if (!user) return;
-    loadChatHistory();
-  }, [user]);
+  }, [token]);
 
   // =====================================================
   // CREATE NEW CONVERSATION
   // =====================================================
 
-  const createConversation = async () => {
-    if (creatingConversationRef.current) return null;
-    creatingConversationRef.current = true;
+  const createConversation = useCallback(async () => {
+    if (!token || isCreatingConversation.current) return null;
+    isCreatingConversation.current = true;
 
     try {
-      const token = localStorage.getItem("token");
-      if (!token) {
-        console.error("JWT token not found");
-        return null;
-      }
-
       console.log("Creating new conversation...");
-
       const response = await fetch(
         `${import.meta.env.VITE_API_URL}/api/chat/conversation`,
         {
@@ -118,9 +106,7 @@ function App() {
       }
 
       const conversation = await response.json();
-      console.log("NEW CONVERSATION CREATED:", conversation);
-
-      setChatHistory((previousHistory) => [conversation, ...previousHistory]);
+      setChatHistory((prev) => [conversation, ...prev]);
       setConversationId(conversation.id);
       setMessages([]);
       setInput("");
@@ -131,21 +117,32 @@ function App() {
       console.error("Error creating conversation:", error);
       return null;
     } finally {
-      creatingConversationRef.current = false;
+      isCreatingConversation.current = false;
     }
-  };
-
-  useEffect(() => {
-    if (!user || chatHistory.length > 0 || conversationId) return;
-    createConversation();
-  }, [user, chatHistory.length, conversationId]);
+  }, [token]);
 
   // =====================================================
-  // SELECT EXISTING CONVERSATION
+  // INITIALIZE DATA UPON AUTH
+  // =====================================================
+
+  useEffect(() => {
+    if (!user || !token) return;
+    loadChatHistory();
+  }, [user, token, loadChatHistory]);
+
+  // Auto-select or create first chat
+  useEffect(() => {
+    if (!user || !token) return;
+    if (chatHistory.length === 0 && !conversationId) {
+      createConversation();
+    }
+  }, [user, token, chatHistory.length, conversationId, createConversation]);
+
+  // =====================================================
+  // SELECT CONVERSATION
   // =====================================================
 
   const selectConversation = (conversation) => {
-    console.log("Selected conversation:", conversation);
     setConversationId(conversation.id);
     setMessages(conversation.messages || []);
     setInput("");
@@ -157,21 +154,11 @@ function App() {
   // =====================================================
 
   useEffect(() => {
-    if (!user) return;
-
-    const token = localStorage.getItem("token");
-    if (!token) {
-      console.error("JWT token not found");
-      return;
-    }
+    if (!user || !token) return;
 
     console.log("Creating WebSocket connection...");
-
-    const socket = new WebSocket(
-      `${import.meta.env.VITE_API_URL.replace(/^http/, "ws")}/ws/chat?token=${encodeURIComponent(
-        token
-      )}`
-    );
+    const wsUrl = `${import.meta.env.VITE_API_URL.replace(/^http/, "ws")}/ws/chat?token=${encodeURIComponent(token)}`;
+    const socket = new WebSocket(wsUrl);
 
     socketRef.current = socket;
 
@@ -181,10 +168,8 @@ function App() {
 
     socket.onmessage = (event) => {
       const chunk = event.data;
-      console.log("WEBSOCKET RESPONSE:", chunk);
 
       if (chunk === "[DONE]") {
-        console.log("AI RESPONSE COMPLETED");
         setLoading(false);
         loadChatHistory();
         return;
@@ -192,15 +177,15 @@ function App() {
 
       setMessages((previousMessages) => {
         const updatedMessages = [...previousMessages];
-        const lastMessage = updatedMessages[updatedMessages.length - 1];
+        const lastIndex = updatedMessages.length - 1;
+        const lastMessage = updatedMessages[lastIndex];
 
         if (lastMessage && lastMessage.role === "assistant") {
-          updatedMessages[updatedMessages.length - 1] = {
+          updatedMessages[lastIndex] = {
             ...lastMessage,
             content: lastMessage.content + chunk,
           };
         }
-
         return updatedMessages;
       });
     };
@@ -225,17 +210,7 @@ function App() {
         socketRef.current = null;
       }
     };
-  }, [user]);
-
-  // =====================================================
-  // NEW CHAT BUTTON
-  // =====================================================
-
-  const startNewChat = async () => {
-    if (loading) return;
-    console.log("Starting new chat...");
-    await createConversation();
-  };
+  }, [user, token, loadChatHistory]);
 
   // =====================================================
   // SEND MESSAGE
@@ -251,8 +226,8 @@ function App() {
       return;
     }
 
-    setMessages((previousMessages) => [
-      ...previousMessages,
+    setMessages((prev) => [
+      ...prev,
       { role: "user", content: userMessage },
       { role: "assistant", content: "" },
     ]);
@@ -287,6 +262,7 @@ function App() {
       socketRef.current.close();
     }
 
+    setToken(null);
     setUser(null);
     setChatHistory([]);
     setConversationId(null);
@@ -299,7 +275,7 @@ function App() {
   // AUTH (LOGIN & SIGN UP)
   // =====================================================
 
-  if (!user) {
+  if (!user || !token) {
     return (
       <Login
         onAuthSuccess={(data) => {
@@ -310,6 +286,9 @@ function App() {
             email: data.email,
           };
           localStorage.setItem("user", JSON.stringify(userData));
+
+          // Update state in sync
+          setToken(data.token);
           setUser(userData);
         }}
       />
@@ -328,7 +307,7 @@ function App() {
           <span>Spring AI</span>
         </div>
 
-        <button className="new-chat-btn" onClick={startNewChat} disabled={loading}>
+        <button className="new-chat-btn" onClick={createConversation} disabled={loading}>
           <span>＋</span> New Chat
         </button>
 

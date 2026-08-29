@@ -14,14 +14,15 @@ import java.util.List;
 public class CorsConfig {
 
     @Bean
-    public FilterRegistrationBean<CorsFilter> customCorsFilter() {
+    public FilterRegistrationBean<CorsFilter> corsFilterRegistrationBean() {
         CorsConfiguration config = new CorsConfiguration();
 
-        // Exact origin match (no trailing slash)
+        // Specific allowed origins (NO trailing slashes)
         config.setAllowedOrigins(List.of(
                 "http://localhost:5173",
                 "http://localhost:5174",
                 "http://127.0.0.1:5173",
+                "http://127.0.0.1:5174",
                 "https://spring-ai-chat-box.vercel.app"
         ));
 
@@ -35,6 +36,7 @@ public class CorsConfig {
         source.registerCorsConfiguration("/**", config);
 
         FilterRegistrationBean<CorsFilter> bean = new FilterRegistrationBean<>(new CorsFilter(source));
+        // Guarantees CORS headers are attached even if Spring Security throws a 401/403
         bean.setOrder(Ordered.HIGHEST_PRECEDENCE);
         return bean;
     }
