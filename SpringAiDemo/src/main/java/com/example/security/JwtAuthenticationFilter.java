@@ -23,12 +23,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     public JwtAuthenticationFilter(
             JwtService jwtService,
             CustomUserDetailsService userDetailsService) {
-
         this.jwtService = jwtService;
         this.userDetailsService = userDetailsService;
     }
 
-    // 1. Tell Spring to skip this filter entirely for preflight OPTIONS requests
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
         return "OPTIONS".equalsIgnoreCase(request.getMethod());
@@ -41,34 +39,33 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             FilterChain filterChain)
             throws ServletException, IOException {
 
-        // 2. Extra safety guard for OPTIONS requests
-        if ("OPTIONS".equalsIgnoreCase(request.getMethod())) {
-            response.setStatus(HttpServletResponse.SC_OK);
-            filterChain.doFilter(request, response);
-            return;
-        }
-
+        final String requestURI = request.getRequestURI();
         final String authHeader = request.getHeader("Authorization");
 
-        // No Authorization header or invalid format -> continue chain
-        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+        System.out.println("--> Incoming Request: " + request.getMethod() + " " + requestURI);
+
+        // Skip auth check for public endpoints
+        if (requestURI.startsWith("/api/auth") || requestURI.startsWith("/ws")) {
             filterChain.doFilter(request, response);
             return;
         }
 
-        // Extract JWT
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            System.err.println("❌ JWT Filter Rejected: Missing or invalid Authorization header. Header value: " + authHeader);
+            filterChain.doFilter(request, response);
+            return;
+        }
+
         final String jwt = authHeader.substring(7);
 
         try {
             String email = jwtService.extractEmail(jwt);
+            System.out.println("Extracted Email from Token: " + email);
 
-            // Only authenticate if nobody is authenticated yet
             if (email != null && SecurityContextHolder.getContext().getAuthentication() == null) {
-
                 UserDetails userDetails = userDetailsService.loadUserByUsername(email);
 
                 if (jwtService.isTokenValid(jwt, userDetails)) {
-
                     UsernamePasswordAuthenticationToken authentication =
                             new UsernamePasswordAuthenticationToken(
                                     userDetails,
@@ -81,11 +78,14 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     );
 
                     SecurityContextHolder.getContext().setAuthentication(authentication);
+                    System.out.println(" Authentication Successful for: " + email);
+                } else {
+                    System.err.println("❌ JWT Token is invalid or expired for: " + email);
                 }
             }
-
         } catch (Exception e) {
-            System.err.println("JWT validation failed: " + e.getMessage());
+            System.err.println("❌ JWT Filter Exception: " + e.getMessage());
+            e.printStackTrace();
         }
 
         filterChain.doFilter(request, response);

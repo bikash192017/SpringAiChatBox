@@ -44,6 +44,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers("/ws/**").permitAll()
+                        .requestMatchers("/api/chat/**").authenticated() // Explicitly permit authenticated requests to chat
                         .anyRequest().authenticated()
                 )
                 .addFilterBefore(
