@@ -28,6 +28,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         this.userDetailsService = userDetailsService;
     }
 
+    // 1. Tell Spring to skip this filter entirely for preflight OPTIONS requests
+    @Override
+    protected boolean shouldNotFilter(HttpServletRequest request) {
+        return "OPTIONS".equalsIgnoreCase(request.getMethod());
+    }
+
     @Override
     protected void doFilterInternal(
             HttpServletRequest request,
@@ -35,37 +41,33 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             FilterChain filterChain)
             throws ServletException, IOException {
 
-        final String authHeader =
-                request.getHeader("Authorization");
+        // 2. Extra safety guard for OPTIONS requests
+        if ("OPTIONS".equalsIgnoreCase(request.getMethod())) {
+            response.setStatus(HttpServletResponse.SC_OK);
+            filterChain.doFilter(request, response);
+            return;
+        }
 
-        // No Authorization header
-        if (authHeader == null ||
-                !authHeader.startsWith("Bearer ")) {
+        final String authHeader = request.getHeader("Authorization");
 
+        // No Authorization header or invalid format -> continue chain
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
             filterChain.doFilter(request, response);
             return;
         }
 
         // Extract JWT
-        final String jwt =
-                authHeader.substring(7);
+        final String jwt = authHeader.substring(7);
 
         try {
-
             String email = jwtService.extractEmail(jwt);
 
             // Only authenticate if nobody is authenticated yet
-            if (email != null &&
-                    SecurityContextHolder.getContext()
-                            .getAuthentication() == null) {
+            if (email != null && SecurityContextHolder.getContext().getAuthentication() == null) {
 
-                UserDetails userDetails =
-                        userDetailsService
-                                .loadUserByUsername(email);
+                UserDetails userDetails = userDetailsService.loadUserByUsername(email);
 
-                if (jwtService.isTokenValid(
-                        jwt,
-                        userDetails)) {
+                if (jwtService.isTokenValid(jwt, userDetails)) {
 
                     UsernamePasswordAuthenticationToken authentication =
                             new UsernamePasswordAuthenticationToken(
@@ -75,21 +77,15 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                             );
 
                     authentication.setDetails(
-                            new WebAuthenticationDetailsSource()
-                                    .buildDetails(request)
+                            new WebAuthenticationDetailsSource().buildDetails(request)
                     );
 
-                    SecurityContextHolder.getContext()
-                            .setAuthentication(authentication);
+                    SecurityContextHolder.getContext().setAuthentication(authentication);
                 }
             }
 
         } catch (Exception e) {
-
-            System.out.println(
-                    "JWT validation failed: "
-                            + e.getMessage()
-            );
+            System.err.println("JWT validation failed: " + e.getMessage());
         }
 
         filterChain.doFilter(request, response);
